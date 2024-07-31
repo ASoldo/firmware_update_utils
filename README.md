@@ -89,3 +89,7 @@ Run the Firmware Update Utility for ESP32:
 - Data Transfer Simulation: Uses a placeholder function to simulate sending data to the device.
 - Progress Indication: Displays the progress percentage of the firmware update process.
 - Checksum Calculation: Ensures data integrity through checksum calculation.
+
+```
+41 steps straight ahead, then 16 steps left from the door, 4 on the right, 33 steps turn right...
+```
