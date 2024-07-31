@@ -25,101 +25,23 @@ int rcx_sendrecv(int fd, unsigned char *sendbuf, int sendlen, unsigned char *rec
 float timer_read(clock_t start_time);
 
 void install_firmware(const char *progname, const char *filename) {
-    int start = IMAGE_START;
-    size_t len = 0;
-    int timeout = 50; // Example timeout value in milliseconds
-
-    printf("Opening port...\n");
-    int fd = open_port("/dev/ttyUSB0"); // Adjust to your port
-    if (fd == -1) {
+    printf("Uploading firmware using esptool.py...\n");
+    
+    char command[512];
+    snprintf(command, sizeof(command), "esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 921600 write_flash -z 0x10000 %s", filename);
+    
+    int ret = system(command);
+    if (ret != 0) {
+        fprintf(stderr, "%s: firmware upload failed\n", progname);
         exit(1);
-    }
-    configure_port(fd);
-
-    printf("Computing checksum...\n");
-    // Compute image checksum
-    cksumlen = (start - len < 0xcc00) ? len : 0xcc00;
-
-    // Setup send buffer
-    send[0] = 0x01; // example command
-    send[1] = 0x02; // example data
-    send[2] = 0x03; // example data
-    send[3] = 0x04; // example data
-    send[4] = 0x05; // example data
-    send[5] = 0x75; // example data
-
-    printf("Sending start firmware download command...\n");
-    // Send command and check response
-    if (rcx_sendrecv(fd, send, 6, recv, 2, 50, RETRIES) != 2) {
-        fprintf(stderr, "%s: start firmware download failed\n", progname);
-        exit(1); // Start firmware
-    }
-
-    printf("Transferring data...\n");
-    addr = 0;
-    idx = 0;
-
-    unsigned char msg[BUFFERSIZE];
-    int msglen = 0;
-    int pos = 0;
-
-    // Initialize starting address
-    start = IMAGE_START;
-    size_t count = 0;
-    size_t total_size = 0;
-
-    if ((file = fopen(filename, "rb")) == NULL) {
-        fprintf(stderr, "%s: failed to open file %s\n", progname, filename);
-        exit(1);
-    }
-
-    // Get total size of the file
-    fseek(file, 0, SEEK_END);
-    total_size = ftell(file);
-    fseek(file, 0, SEEK_SET);
-
-    printf("Starting file transfer...\n");
-    clock_t start_time = clock();
-
-    while ((len = fread(buf, 1, BUFFERSIZE, file)) > 0) {
-        count += len;
-
-        // Print progress
-        printf("\rProgress: %.2f%%", (count / (float)total_size) * 100);
-        fflush(stdout);
-
-        if (len == sizeof(msg) && !memcmp(buf, msg, sizeof(msg))) {
-            printf("\nFirmware update completed successfully.\n");
-            return; /* success */
-        }
-        while (timer_read(start_time) < (float)(timeout / 1000.0f)) {
-            // Waiting
-        }
-
-        // Checksum calculation
-        int sum = 0;
-        for (pos = 0; pos < sizeof(buf); pos++) {
-            sum += buf[pos];
-        }
-
-        // Send data
-        if (rcx_sendrecv(fd, buf, len, recv, 2, 50, RETRIES) != 2) {
-            fprintf(stderr, "%s: data transfer failed\n", progname);
-            exit(1);
-        }
     }
 
     printf("\nFirmware update completed successfully.\n");
-    fclose(file);
-    close(fd);
 
-    // Example data array for fast download
-    unsigned char fastdl_image[] = {
-        121, 6, 0, 15, 107, 134, 238, 128, 121,
-        238, 116, 94, 0, 59, 154, 11, 135, 121,
-        127, 216, 114, 80, 254, 103, 62, 217, 24,
-        104, 142, 159, 6, 254, 13, 106, 142, 233
-    };
+    // Add a small delay to ensure everything is written properly
+    usleep(100000);
+    printf("Resetting the ESP32...\n");
+    system("esptool.py --port /dev/ttyUSB0 --before default_reset run");
 }
 
 int main(int argc, char *argv[]) {
@@ -168,14 +90,44 @@ int receive_data(int fd, unsigned char *buffer, int length) {
 }
 
 int rcx_sendrecv(int fd, unsigned char *sendbuf, int sendlen, unsigned char *recvbuf, int recvlen, int timeout, int retries) {
-    if (send_data(fd, sendbuf, sendlen) != sendlen) {
-        return -1;
+    int attempts = 0;
+    int bytes_sent, bytes_received, total_bytes_received;
+
+    while (attempts < retries) {
+        printf("Sending data, attempt %d...\n", attempts + 1);
+        bytes_sent = send_data(fd, sendbuf, sendlen);
+        if (bytes_sent != sendlen) {
+            perror("Failed to send data");
+            attempts++;
+            continue;
+        }
+
+        printf("Waiting for response...\n");
+        usleep(timeout * 1000);
+
+        total_bytes_received = 0;
+        while (total_bytes_received < recvlen) {
+            bytes_received = receive_data(fd, recvbuf + total_bytes_received, recvlen - total_bytes_received);
+            if (bytes_received < 0) {
+                perror("Failed to receive data");
+                attempts++;
+                break;
+            }
+            total_bytes_received += bytes_received;
+        }
+
+        if (total_bytes_received != recvlen) {
+            fprintf(stderr, "Incomplete response: expected %d bytes, received %d bytes\n", recvlen, total_bytes_received);
+            attempts++;
+            continue;
+        }
+
+        printf("Data received successfully.\n");
+        return total_bytes_received;
     }
-    usleep(timeout * 1000);
-    if (receive_data(fd, recvbuf, recvlen) != recvlen) {
-        return -1;
-    }
-    return recvlen;
+
+    printf("Max retries reached. Data transfer failed.\n");
+    return -1; // Indicate failure after retries
 }
 
 float timer_read(clock_t start_time) {
