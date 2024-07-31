@@ -48,6 +48,30 @@ Execute the compiled program with the program name and the firmware file as argu
 
 ```
 
+## ESP32 Support
+
+The new functionality is contained in the main_esp32.c file.
+
+## Instructions for ESP32
+
+Compile the ESP32 Firmware Update Utility:
+
+```sh
+
+gcc -o fuu main_esp32.c
+```
+
+## Prepare the ESP32:
+
+Connect your ESP32 to your computer via USB. Put the ESP32 into bootloader mode by holding down the BOOT button and pressing and releasing the RESET button.
+
+Run the Firmware Update Utility for ESP32:
+
+```sh
+./fuu mark_1 firmware_file.bin
+
+```
+
 ## Features
 
 - File Reading: Reads the firmware file in chunks.
