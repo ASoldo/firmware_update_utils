@@ -1,3 +1,5 @@
+![image](https://github.com/user-attachments/assets/f7f264fc-328f-47e3-89e3-d214dd60cb89)
+
 # Firmware Update Utility
 
 This project is a firmware update utility designed to simulate the process of updating firmware with progress indication. It reads a firmware file, calculates a checksum, and simulates the data transfer to the device.
